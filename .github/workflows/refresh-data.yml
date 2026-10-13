@@ -1,0 +1,48 @@
+name: Daily market data refresh
+
+# Runs after US market close on weekdays (22:30 UTC = 5:30pm ET),
+# re-pulls 5y of history, recomputes shrunk stats, and commits the
+# fresh stocks.json. GitHub Pages serves the update automatically —
+# the app is live-data-backed with zero servers.
+on:
+  schedule:
+    - cron: "30 22 * * 1-5"
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install numpy pandas scipy yfinance
+
+      - name: Run data pipeline
+        run: python stock_planner/data_pipeline.py
+
+      - name: Fail if pipeline fell back to synthetic data
+        run: |
+          python - << 'EOF'
+          import json, sys
+          d = json.load(open("stock_planner/web_app/stocks.json"))
+          if d["source"] != "live":
+              print("Pipeline could not reach market data; keeping previous stocks.json")
+              sys.exit(1)
+          print(f"Live data OK: {len(d['tickers'])} assets as of {d['asOf']}")
+          EOF
+
+      - name: Commit refreshed data
+        run: |
+          git config user.name "data-refresh-bot"
+          git config user.email "actions@github.com"
+          git add stock_planner/web_app/stocks.json
+          git diff --cached --quiet && echo "No changes" || \
+            (git commit -m "Daily data refresh $(date -u +%F)" && git push)

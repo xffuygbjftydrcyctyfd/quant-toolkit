@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Efficient Frontier — Portfolio Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0B1220;
+    --surface: #121B2E;
+    --surface-2: #17233A;
+    --border: #223047;
+    --text: #E5E9F0;
+    --text-dim: #8B96A8;
+    --teal: #4FD1C5;
+    --gold: #F0B429;
+    --rose: #F87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 32px 20px 60px; }
+
+  header { margin-bottom: 28px; }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--teal);
+    text-transform: uppercase;
+  }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700;
+    margin: 6px 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .sub { color: var(--text-dim); font-size: 15px; max-width: 640px; line-height: 1.5; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    margin-top: 14px;
+    color: var(--text-dim);
+  }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+  .badge.live .dot { background: var(--teal); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 20px;
+    margin-top: 24px;
+  }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .card h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 14px;
+    color: var(--text);
+  }
+
+  .ticker-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .ticker-row input[type="checkbox"] {
+    appearance: none;
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-2);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .ticker-row input[type="checkbox"]:checked {
+    background: var(--teal);
+    border-color: var(--teal);
+  }
+  .ticker-row input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 4.5px; top: 1px;
+    width: 4px; height: 8px;
+    border: solid #0B1220;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .slider-block { margin-top: 20px; }
+  .slider-label {
+    display: flex; justify-content: space-between;
+    font-size: 13px; color: var(--text-dim); margin-bottom: 8px;
+  }
+  .slider-label span:last-child { font-family: 'JetBrains Mono', monospace; color: var(--gold); }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--teal);
+  }
+
+  .chart-card { min-height: 420px; }
+  #frontierChart { max-height: 400px; }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .stat {
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat .value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 600; margin-top: 4px; }
+  .stat.gold .value { color: var(--gold); }
+
+  .weights-section { margin-top: 20px; }
+  .weight-bar-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 70px;
+    align-items: center;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 5px 0;
+  }
+  .weight-track {
+    position: relative;
+    height: 16px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .weight-fill {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: var(--teal);
+  }
+  .weight-fill.negative { background: var(--rose); }
+  .weight-pct { text-align: right; color: var(--text-dim); }
+
+  footer {
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  footer code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Quant Finance Toolkit</div>
+    <h1>Efficient Frontier</h1>
+    <p class="sub">Mean-variance portfolio optimization, solved in closed form. Select assets, set a risk-free rate, and watch the optimal allocation update instantly — computed entirely in your browser.</p>
+    <p class="sub" style="margin-top:8px; font-size:13px;">Educational demonstration of portfolio theory — not investment advice. See footer for details.</p>
+    <div class="badge" id="dataBadge"><span class="dot"></span><span id="dataBadgeText">Loading data…</span></div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Assets</h2>
+      <div id="tickerList"></div>
+
+      <div class="slider-block">
+        <div class="slider-label"><span>Risk-free rate</span><span id="rfValue">4.00%</span></div>
+        <input type="range" id="rfSlider" min="0" max="10" step="0.25" value="4">
+      </div>
+    </div>
+
+    <div class="card chart-card">
+      <h2>Risk / Return</h2>
+      <canvas id="frontierChart"></canvas>
+      <div class="stats-row" id="statsRow"></div>
+    </div>
+  </div>
+
+  <div class="card weights-section">
+    <h2>Max-Sharpe Allocation</h2>
+    <div id="weightsList"></div>
+  </div>
+
+  <footer>
+    <strong>Not investment advice.</strong> This is an educational demonstration of mean-variance portfolio theory. It does not account for taxes, fees, liquidity needs, transaction costs, or your personal financial situation, and historical returns are a noisy, unreliable estimate of future returns — small changes in the input data can swing "optimal" weights significantly. Consult a licensed financial advisor before making investment decisions.
+    <br><br>
+    Closed-form Markowitz solution (matrix inversion, no numerical solver) — allows short positions, unlike the long-only Python version in this toolkit. Weights are annualized from daily return statistics.
+    To use real market data instead of the sample dataset shown by default, run <code>fetch_data_for_app.py</code> (included in the repo) and place the resulting <code>portfolio_data.json</code> next to this HTML file.
+  </footer>
+</div>
+
+<script>
+const PRESET_TICKERS = ["AAPL","MSFT","GOOGL","AMZN","NVDA","JPM","XOM","JNJ","PG","GLD","TLT","SPY"];
+
+// ---- Synthetic fallback data generator (mirrors the Python data_utils.py logic) ----
+function seededRandom(seed) {
+  let s = seed;
+  return function () {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+function randn(rand) {
+  const u = 1 - rand(), v = rand();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function generateSyntheticData(tickers) {
+  const rand = seededRandom(42);
+  const n = tickers.length;
+  const mu = tickers.map(() => 0.04 + rand() * 0.10);       // 4%-14% annual return
+  const sigma = tickers.map(() => 0.15 + rand() * 0.20);    // 15%-35% annual vol
+
+  // Random correlation matrix, blended toward identity (moderate correlations)
+  const Amat = Array.from({length: n}, () => Array.from({length: n}, () => rand() * 2 - 1));
+  const rawCov = math.multiply(Amat, math.transpose(Amat));
+  const d = math.diag(rawCov).map(Math.sqrt);
+  const corr = rawCov.map((row, i) => row.map((v, j) => v / (d[i] * d[j])));
+  for (let i = 0; i < n; i++) corr[i][i] = 1;
+  const blended = corr.map((row, i) => row.map((v, j) => (i === j ? 1 : 0.5 * v)));
+
+  const cov = blended.map((row, i) => row.map((v, j) => v * sigma[i] * sigma[j]));
+  return { tickers, mu, cov, asOf: null };
+}
+
+// ---- Closed-form Markowitz math ----
+function computeClosedForm(mu, cov, ones) {
+  const covInv = math.inv(cov);
+  const A = math.multiply(math.multiply(ones, covInv), ones);
+  const B = math.multiply(math.multiply(ones, covInv), mu);
+  const C = math.multiply(math.multiply(mu, covInv), mu);
+  const D = A * C - B * B;
+  return { covInv, A, B, C, D };
+}
+function frontierWeights(mu, ones, target, params) {
+  const { covInv, A, B, C, D } = params;
+  const coef1 = (C - B * target) / D;
+  const coef2 = (A * target - B) / D;
+  const vec = mu.map((m, i) => coef1 * ones[i] + coef2 * m);
+  return math.multiply(covInv, vec);
+}
+function tangencyWeights(mu, ones, rf, params) {
+  const { covInv } = params;
+  const excess = mu.map((m, i) => m - rf * ones[i]);
+  const denom = math.multiply(math.multiply(ones, covInv), excess);
+  return math.multiply(covInv, excess).map(w => w / denom);
+}
+function gmvWeights(ones, params) {
+  const { covInv, A } = params;
+  return math.multiply(covInv, ones).map(w => w / A);
+}
+function portfolioStats(w, mu, cov) {
+  const ret = w.reduce((s, wi, i) => s + wi * mu[i], 0);
+  let variance = 0;
+  for (let i = 0; i < w.length; i++)
+    for (let j = 0; j < w.length; j++)
+      variance += w[i] * cov[i][j] * w[j];
+  return { ret, vol: Math.sqrt(variance) };
+}
+
+// ---- Random long-only portfolio cloud (Dirichlet(1,...,1) via normalized exponentials) ----
+function randomCloud(mu, cov, nPortfolios, seed) {
+  const rand = seededRandom(seed);
+  const n = mu.length;
+  const points = [];
+  for (let p = 0; p < nPortfolios; p++) {
+    const raw = Array.from({length: n}, () => -Math.log(rand() + 1e-9));
+    const sum = raw.reduce((a, b) => a + b, 0);
+    const w = raw.map(v => v / sum);
+    const { ret, vol } = portfolioStats(w, mu, cov);
+    points.push({ x: vol * 100, y: ret * 100 });
+  }
+  return points;
+}
+
+// ---- State ----
+let STATE = { tickers: [], mu: [], cov: [], selected: new Set(), asOf: null, isLive: false };
+let chart = null;
+
+async function loadData() {
+  try {
+    const res = await fetch('portfolio_data.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('not found');
+    const json = await res.json();
+    STATE = { ...json, selected: new Set(json.tickers.map((_, i) => i)), isLive: true };
+  } catch (e) {
+    const synth = generateSyntheticData(PRESET_TICKERS);
+    STATE = { ...synth, selected: new Set(PRESET_TICKERS.map((_, i) => i)), isLive: false };
+  }
+  renderBadge();
+  buildTickerList();
+  recompute();
+}
+
+function renderBadge() {
+  const badge = document.getElementById('dataBadge');
+  const text = document.getElementById('dataBadgeText');
+  if (STATE.isLive) {
+    badge.classList.add('live');
+    text.textContent = `Live data · as of ${STATE.asOf || 'last fetch'}`;
+  } else {
+    badge.classList.remove('live');
+    text.textContent = 'Sample data (synthetic) — see footer to use real data';
+  }
+}
+
+function buildTickerList() {
+  const container = document.getElementById('tickerList');
+  container.innerHTML = '';
+  STATE.tickers.forEach((t, i) => {
+    const row = document.createElement('label');
+    row.className = 'ticker-row';
+    row.innerHTML = `<input type="checkbox" ${STATE.selected.has(i) ? 'checked' : ''} data-idx="${i}"><span>${t}</span>`;
+    row.querySelector('input').addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.idx);
+      if (e.target.checked) STATE.selected.add(idx); else STATE.selected.delete(idx);
+      recompute();
+    });
+    container.appendChild(row);
+  });
+}
+
+function getSelectedData() {
+  const idxs = Array.from(STATE.selected).sort((a, b) => a - b);
+  const tickers = idxs.map(i => STATE.tickers[i]);
+  const mu = idxs.map(i => STATE.mu[i]);
+  const cov = idxs.map(i => idxs.map(j => STATE.cov[i][j]));
+  return { tickers, mu, cov };
+}
+
+function recompute() {
+  const { tickers, mu, cov } = getSelectedData();
+  const n = tickers.length;
+  const chartCanvas = document.getElementById('frontierChart');
+
+  if (n < 2) {
+    document.getElementById('statsRow').innerHTML =
+      '<div class="stat"><div class="label">Select at least 2 assets</div></div>';
+    document.getElementById('weightsList').innerHTML = '';
+    if (chart) { chart.destroy(); chart = null; }
+    return;
+  }
+
+  const ones = new Array(n).fill(1);
+  const rf = parseFloat(document.getElementById('rfSlider').value) / 100;
+
+  let params;
+  try {
+    params = computeClosedForm(mu, cov, ones);
+  } catch (e) {
+    document.getElementById('statsRow').innerHTML =
+      '<div class="stat"><div class="label">Covariance matrix not invertible for this selection</div></div>';
+    return;
+  }
+
+  const wTan = tangencyWeights(mu, ones, rf, params);
+  const wGmv = gmvWeights(ones, params);
+  const tanStats = portfolioStats(wTan, mu, cov);
+  const gmvStats = portfolioStats(wGmv, mu, cov);
+
+  const muMin = Math.min(...mu), muMax = Math.max(...mu);
+  const span = muMax - muMin || 0.05;
+  const targets = [];
+  for (let k = 0; k <= 50; k++) targets.push(muMin - 0.3 * span + (k / 50) * span * 1.6);
+  const frontierPoints = targets.map(t => {
+    const w = frontierWeights(mu, ones, t, params);
+    const s = portfolioStats(w, mu, cov);
+    return { x: s.vol * 100, y: s.ret * 100 };
+  }).sort((a, b) => a.x - b.x);
+
+  const cloud = randomCloud(mu, cov, 700, 7);
+
+  renderChart(cloud, frontierPoints, tanStats, gmvStats);
+  renderStats(tanStats, gmvStats, rf);
+  renderWeights(tickers, wTan);
+}
+
+function renderChart(cloud, frontier, tanStats, gmvStats) {
+  const ctx = document.getElementById('frontierChart').getContext('2d');
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Random long-only portfolios',
+          data: cloud,
+          backgroundColor: 'rgba(139,150,168,0.35)',
+          pointRadius: 2.5,
+          showLine: false,
+        },
+        {
+          label: 'Efficient frontier (shorting allowed)',
+          data: frontier,
+          borderColor: '#4FD1C5',
+          backgroundColor: '#4FD1C5',
+          pointRadius: 0,
+          showLine: true,
+          borderWidth: 2.5,
+          tension: 0.15,
+        },
+        {
+          label: 'Max Sharpe',
+          data: [{ x: tanStats.vol * 100, y: tanStats.ret * 100 }],
+          backgroundColor: '#F0B429',
+          borderColor: '#0B1220',
+          borderWidth: 1.5,
+          pointStyle: 'star',
+          pointRadius: 11,
+          showLine: false,
+        },
+        {
+          label: 'Min variance',
+          data: [{ x: gmvStats.vol * 100, y: gmvStats.ret * 100 }],
+          backgroundColor: '#E5E9F0',
+          borderColor: '#0B1220',
+          borderWidth: 1.5,
+          pointStyle: 'rectRot',
+          pointRadius: 7,
+          showLine: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: { display: true, text: 'Annualized volatility (%)', color: '#8B96A8' },
+          ticks: { color: '#8B96A8' },
+          grid: { color: '#223047' },
+        },
+        y: {
+          title: { display: true, text: 'Annualized expected return (%)', color: '#8B96A8' },
+          ticks: { color: '#8B96A8' },
+          grid: { color: '#223047' },
+        },
+      },
+      plugins: {
+        legend: { labels: { color: '#E5E9F0', font: { family: 'Inter', size: 11 } } },
+      },
+    },
+  });
+}
+
+function renderStats(tanStats, gmvStats, rf) {
+  const sharpe = (tanStats.ret - rf) / tanStats.vol;
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat gold"><div class="label">Max Sharpe Return</div><div class="value">${(tanStats.ret*100).toFixed(2)}%</div></div>
+    <div class="stat gold"><div class="label">Max Sharpe Vol</div><div class="value">${(tanStats.vol*100).toFixed(2)}%</div></div>
+    <div class="stat gold"><div class="label">Sharpe Ratio</div><div class="value">${sharpe.toFixed(2)}</div></div>
+  `;
+}
+
+function renderWeights(tickers, weights) {
+  const maxAbs = Math.max(...weights.map(Math.abs), 0.01);
+  const container = document.getElementById('weightsList');
+  container.innerHTML = tickers.map((t, i) => {
+    const w = weights[i];
+    const pct = (w * 100).toFixed(1);
+    const widthPct = (Math.abs(w) / maxAbs) * 50;
+    const isNeg = w < 0;
+    const left = isNeg ? 50 - widthPct : 50;
+    return `
+      <div class="weight-bar-row">
+        <span>${t}</span>
+        <div class="weight-track">
+          <div class="weight-fill ${isNeg ? 'negative' : ''}" style="left:${left}%; width:${widthPct}%;"></div>
+        </div>
+        <span class="weight-pct">${pct}%</span>
+      </div>`;
+  }).join('');
+}
+
+document.getElementById('rfSlider').addEventListener('input', (e) => {
+  document.getElementById('rfValue').textContent = parseFloat(e.target.value).toFixed(2) + '%';
+  recompute();
+});
+
+loadData();
+</script>
+</body>
+</html>

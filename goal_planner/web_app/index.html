@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goal Planner — Quant Finance Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0B1220; --surface: #121B2E; --surface-2: #17233A;
+    --border: #223047; --text: #E5E9F0; --text-dim: #8B96A8;
+    --teal: #4FD1C5; --gold: #F0B429; --rose: #F87171;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 60px; }
+
+  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px;
+             letter-spacing: 0.12em; color: var(--teal); text-transform: uppercase; }
+  h1 { font-family: 'Space Grotesk', sans-serif; font-size: clamp(26px, 4vw, 36px);
+       font-weight: 700; margin: 6px 0 8px; letter-spacing: -0.01em; }
+  .sub { color: var(--text-dim); font-size: 15px; line-height: 1.5; max-width: 620px; }
+
+  .steps { display: flex; gap: 8px; margin: 26px 0 20px; }
+  .step-dot { flex: 1; height: 4px; border-radius: 100px; background: var(--surface-2); }
+  .step-dot.active { background: var(--teal); }
+  .step-dot.done { background: rgba(79,209,197,0.4); }
+
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 12px; padding: 24px; }
+  .card h2 { font-family: 'Space Grotesk', sans-serif; font-size: 18px;
+             font-weight: 600; margin: 0 0 4px; }
+  .card .hint { color: var(--text-dim); font-size: 13px; margin: 0 0 18px; }
+
+  label.field { display: block; margin-bottom: 16px; }
+  label.field .lbl { font-size: 13px; color: var(--text-dim); margin-bottom: 6px; display: block; }
+  input[type="number"], select {
+    width: 100%; padding: 10px 12px; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    font-family: 'JetBrains Mono', monospace; font-size: 15px;
+  }
+  input[type="number"]:focus, select:focus { outline: none; border-color: var(--teal); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px) { .field-row { grid-template-columns: 1fr; } }
+
+  .q-block { margin-bottom: 20px; }
+  .q-block .q { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+  .opt { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px;
+         border: 1px solid var(--border); border-radius: 8px; margin-bottom: 7px;
+         cursor: pointer; font-size: 13.5px; line-height: 1.4; background: var(--surface-2); }
+  .opt:hover { border-color: var(--teal); }
+  .opt input { margin-top: 2px; accent-color: var(--teal); }
+  .opt.selected { border-color: var(--teal); background: rgba(79,209,197,0.08); }
+
+  .btn { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15px;
+         padding: 11px 22px; border-radius: 8px; border: none; cursor: pointer;
+         background: var(--teal); color: #0B1220; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: var(--text-dim);
+               border: 1px solid var(--border); }
+  .btn-row { display: flex; justify-content: space-between; margin-top: 22px; }
+
+  .disclaimer-list { font-size: 14px; line-height: 1.65; color: var(--text);
+                     padding-left: 18px; }
+  .disclaimer-list li { margin-bottom: 10px; }
+  .ack { display: flex; gap: 10px; align-items: flex-start; margin-top: 18px;
+         font-size: 14px; cursor: pointer; }
+  .ack input { margin-top: 3px; accent-color: var(--teal); }
+
+  .prob-hero { text-align: center; padding: 26px 0 8px; }
+  .prob-hero .big { font-family: 'Space Grotesk', sans-serif; font-size: 62px;
+                    font-weight: 700; color: var(--gold); line-height: 1; }
+  .prob-hero .cap { color: var(--text-dim); font-size: 14px; margin-top: 8px;
+                    max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.5; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
+  @media (max-width: 560px) { .stats-row { grid-template-columns: 1fr; } }
+  .stat { background: var(--surface-2); border-radius: 8px; padding: 12px 14px; }
+  .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase;
+                 letter-spacing: 0.06em; }
+  .stat .value { font-family: 'JetBrains Mono', monospace; font-size: 17px;
+                 font-weight: 600; margin-top: 4px; }
+
+  .weight-bar-row { display: grid; grid-template-columns: 110px 1fr 120px;
+                    align-items: center; gap: 10px;
+                    font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 6px 0; }
+  .weight-track { position: relative; height: 16px; background: var(--surface-2);
+                  border-radius: 4px; }
+  .weight-fill { position: absolute; top: 0; bottom: 0; left: 0;
+                 background: var(--teal); border-radius: 4px; }
+  .weight-range { position: absolute; top: 6px; height: 4px;
+                  background: rgba(240,180,41,0.55); border-radius: 2px; }
+  .weight-pct { text-align: right; color: var(--text-dim); }
+
+  .sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 8px; }
+  @media (max-width: 560px) { .sliders { grid-template-columns: 1fr; } }
+  .slider-label { display: flex; justify-content: space-between; font-size: 13px;
+                  color: var(--text-dim); margin-bottom: 6px; }
+  .slider-label span:last-child { font-family: 'JetBrains Mono', monospace; color: var(--gold); }
+  input[type="range"] { width: 100%; accent-color: var(--teal); }
+
+  details { margin-top: 18px; border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 16px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+  details summary { cursor: pointer; color: var(--text); font-weight: 500; font-size: 14px; }
+  table.assump { width: 100%; border-collapse: collapse; margin-top: 10px;
+                 font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  table.assump th, table.assump td { text-align: left; padding: 5px 8px;
+                                     border-bottom: 1px solid var(--border); }
+  table.assump th { color: var(--text-dim); font-weight: 500; }
+
+  .section-gap { margin-top: 22px; }
+  .hidden { display: none; }
+  .computing { text-align: center; color: var(--text-dim); padding: 40px 0;
+               font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Quant Finance Toolkit</div>
+    <h1>Goal Planner</h1>
+    <p class="sub">Set a financial goal, answer a short risk questionnaire, and see the probability of reaching it — with the uncertainty shown, not hidden. Everything runs in your browser; nothing you enter is stored or sent anywhere.</p>
+  </header>
+
+  <div class="steps">
+    <div class="step-dot" id="dot0"></div>
+    <div class="step-dot" id="dot1"></div>
+    <div class="step-dot" id="dot2"></div>
+    <div class="step-dot" id="dot3"></div>
+  </div>
+
+  <!-- STEP 1: GOAL -->
+  <div class="card" id="step0">
+    <h2>Your goal</h2>
+    <p class="hint">All amounts in today's dollars — the target is automatically adjusted for inflation.</p>
+    <label class="field"><span class="lbl">What are you saving for?</span>
+      <select id="goalType">
+        <option value="retirement">Retirement</option>
+        <option value="purchase">A big purchase (home, car…)</option>
+        <option value="education">Education</option>
+        <option value="wealth">General wealth target</option>
+      </select>
+    </label>
+    <div class="field-row">
+      <label class="field"><span class="lbl">Target amount ($)</span>
+        <input type="number" id="target" value="500000" min="1" step="1000"></label>
+      <label class="field"><span class="lbl">Years until you need it</span>
+        <input type="number" id="years" value="25" min="1" max="50" step="1"></label>
+    </div>
+    <div class="field-row">
+      <label class="field"><span class="lbl">Current savings ($)</span>
+        <input type="number" id="current" value="20000" min="0" step="500"></label>
+      <label class="field"><span class="lbl">Monthly contribution ($)</span>
+        <input type="number" id="monthly" value="800" min="0" step="50"></label>
+    </div>
+    <div class="btn-row"><span></span>
+      <button class="btn" onclick="goStep(1)">Next: risk questionnaire</button></div>
+  </div>
+
+  <!-- STEP 2: QUESTIONNAIRE -->
+  <div class="card hidden" id="step1">
+    <h2>Risk questionnaire</h2>
+    <p class="hint">Six questions. There are no right answers — this maps how much short-term loss you can genuinely live with.</p>
+    <div id="questions"></div>
+    <div class="btn-row">
+      <button class="btn ghost" onclick="goStep(0)">Back</button>
+      <button class="btn" id="qNext" disabled onclick="goStep(2)">Next</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: DISCLAIMER GATE -->
+  <div class="card hidden" id="step2">
+    <h2>Before you see your projection</h2>
+    <ul class="disclaimer-list">
+      <li><strong>This is a financial education tool, not personalized investment advice.</strong> It doesn't know your taxes, debts, health, family situation, or anything else a real advisor would ask about.</li>
+      <li><strong>The projections are built on assumptions, not knowledge of the future.</strong> Expected returns for each asset class are long-run estimates — reasonable, stated openly below the results, and certainly wrong to some degree.</li>
+      <li><strong>The probability you'll see is a model output, not a promise.</strong> A 75% chance of reaching your goal also means a 1-in-4 chance of falling short.</li>
+      <li>For decisions involving real money, consult a licensed financial advisor.</li>
+    </ul>
+    <label class="ack"><input type="checkbox" id="ackBox" onchange="document.getElementById('showResults').disabled = !this.checked">
+      <span>I understand this is an educational model, not financial advice.</span></label>
+    <div class="btn-row">
+      <button class="btn ghost" onclick="goStep(1)">Back</button>
+      <button class="btn" id="showResults" disabled onclick="goStep(3); computeAll(true);">Show my projection</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: RESULTS -->
+  <div class="hidden" id="step3">
+    <div class="card">
+      <div id="computing" class="computing">running simulations…</div>
+      <div id="results" class="hidden">
+        <div class="prob-hero">
+          <div class="big" id="probBig">—</div>
+          <div class="cap" id="probCap"></div>
+        </div>
+        <div class="stats-row" id="statsRow"></div>
+        <canvas id="fanChart" height="130"></canvas>
+
+        <div class="section-gap">
+          <h2 style="font-size:16px; font-family:'Space Grotesk',sans-serif; margin:0 0 4px;">Suggested allocation</h2>
+          <p class="hint" style="margin-bottom:10px;">Teal bar = point estimate. Gold band = how the weight shifts when expected returns are perturbed by ±1.5% — the honest range, since nobody knows expected returns to the decimal.</p>
+          <div id="weightsList"></div>
+        </div>
+
+        <div class="section-gap">
+          <h2 style="font-size:16px; font-family:'Space Grotesk',sans-serif; margin:0 0 10px;">What if…</h2>
+          <div class="sliders">
+            <div>
+              <div class="slider-label"><span>Monthly contribution</span><span id="wifMonthlyVal"></span></div>
+              <input type="range" id="wifMonthly" min="0" step="25">
+            </div>
+            <div>
+              <div class="slider-label"><span>Years until goal</span><span id="wifYearsVal"></span></div>
+              <input type="range" id="wifYears" min="1" max="50" step="1">
+            </div>
+          </div>
+        </div>
+
+        <details>
+          <summary>Assumptions &amp; methodology</summary>
+          <div id="assumptions"></div>
+          <p>Risk questionnaire (0–18 raw) is scaled to 0–100, then adjusted by horizon: under 3 years caps the score at 25, under 7 years caps it at 60, over 15 years adds 8 (long horizons can carry more risk). The score maps to a risk-aversion parameter λ = 10^(2 − 2.3·score/100), and the allocation maximizes w'μ − (λ/2)·w'Σw, long-only, fully invested.</p>
+          <p>The goal simulation runs 6,000 Monte Carlo paths of monthly lognormal returns at the portfolio's blended return/volatility (equivalent to continuous rebalancing), adds your monthly contribution each month, and compares final values against your target grown at 2.5%/yr inflation. Every formula here was validated against an independent Python/SciPy implementation.</p>
+          <p><strong>Not investment advice.</strong> No taxes, fees, or personal circumstances are modeled.</p>
+        </details>
+
+        <div class="btn-row">
+          <button class="btn ghost" onclick="goStep(0)">Start over</button>
+          <span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =================== Capital market assumptions ===================
+const ASSETS = ["US Stocks", "US Small Cap", "Intl Stocks", "Bonds", "Cash", "Gold"];
+const MU = [0.085, 0.095, 0.075, 0.040, 0.030, 0.045];
+const VOL = [0.16, 0.20, 0.17, 0.055, 0.01, 0.15];
+const CORR = [
+  [1.00, 0.90, 0.80, 0.10, 0.05, 0.05],
+  [0.90, 1.00, 0.75, 0.05, 0.05, 0.05],
+  [0.80, 0.75, 1.00, 0.10, 0.05, 0.10],
+  [0.10, 0.05, 0.10, 1.00, 0.05, 0.15],
+  [0.05, 0.05, 0.05, 0.05, 1.00, 0.00],
+  [0.05, 0.05, 0.10, 0.15, 0.00, 1.00],
+];
+const COV = CORR.map((row, i) => row.map((c, j) => c * VOL[i] * VOL[j]));
+const INFLATION = 0.025;
+
+// =================== Validated math core ===================
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function gaussianPair(rand) {
+  const u1 = Math.max(rand(), 1e-12), u2 = rand();
+  const r = Math.sqrt(-2 * Math.log(u1));
+  return [r * Math.cos(2 * Math.PI * u2), r * Math.sin(2 * Math.PI * u2)];
+}
+function projectSimplex(v) {
+  const n = v.length;
+  const u = [...v].sort((a, b) => b - a);
+  let cssv = 0, theta = 0;
+  for (let i = 0; i < n; i++) {
+    cssv += u[i];
+    const t = (cssv - 1) / (i + 1);
+    if (u[i] - t > 0) theta = t;
+  }
+  return v.map(x => Math.max(x - theta, 0));
+}
+function matVec(M, v) {
+  return M.map(row => row.reduce((s, x, j) => s + x * v[j], 0));
+}
+function maxEigenvalue(M, iters = 100) {
+  let v = new Array(M.length).fill(1 / Math.sqrt(M.length));
+  let lambda = 0;
+  for (let k = 0; k < iters; k++) {
+    const Mv = matVec(M, v);
+    lambda = Math.sqrt(Mv.reduce((s, x) => s + x * x, 0));
+    v = Mv.map(x => x / (lambda || 1));
+  }
+  return lambda;
+}
+function longOnlyWeights(lam, mu, cov, iters = 20000) {
+  const n = mu.length;
+  const L = lam * maxEigenvalue(cov) + 1e-9;
+  const eta = 1 / L;
+  let w = new Array(n).fill(1 / n);
+  let y = [...w];
+  let tK = 1;
+  for (let k = 0; k < iters; k++) {
+    const Cy = matVec(cov, y);
+    const grad = Cy.map((c, i) => lam * c - mu[i]);
+    const wNext = projectSimplex(y.map((yi, i) => yi - eta * grad[i]));
+    const tNext = (1 + Math.sqrt(1 + 4 * tK * tK)) / 2;
+    y = wNext.map((wi, i) => wi + ((tK - 1) / tNext) * (wi - w[i]));
+    w = wNext; tK = tNext;
+  }
+  return w;
+}
+function portfolioStats(w, mu, cov) {
+  const ret = w.reduce((s, wi, i) => s + wi * mu[i], 0);
+  let variance = 0;
+  for (let i = 0; i < w.length; i++)
+    for (let j = 0; j < w.length; j++)
+      variance += w[i] * cov[i][j] * w[j];
+  return { ret, vol: Math.sqrt(variance) };
+}
+function scoreToLambda(score) { return Math.pow(10, 2 - 2.3 * score / 100); }
+function adjustedScore(raw, years) {
+  let s = raw;
+  if (years < 3) s = Math.min(s, 25);
+  else if (years < 7) s = Math.min(s, 60);
+  else if (years > 15) s = Math.min(100, s + 8);
+  return s;
+}
+function percentileSorted(sorted, p) {
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+function goalSimulation(w, mu, cov, { target, current, monthly, years,
+                                       nSims = 6000, seed = 12345,
+                                       inflation = INFLATION, fanEvery = 3 }) {
+  const { ret: pMu, vol: pVol } = portfolioStats(w, mu, cov);
+  const months = Math.round(years * 12);
+  const mDrift = (pMu - 0.5 * pVol * pVol) / 12;
+  const mSd = pVol / Math.sqrt(12);
+  const rand = mulberry32(seed);
+  const values = new Float64Array(nSims).fill(current);
+  const fan = [];
+  let spareZ = null;
+  const nextZ = () => {
+    if (spareZ !== null) { const z = spareZ; spareZ = null; return z; }
+    const [z1, z2] = gaussianPair(rand); spareZ = z2; return z1;
+  };
+  for (let t = 0; t < months; t++) {
+    for (let s = 0; s < nSims; s++) {
+      values[s] = values[s] * Math.exp(mDrift + mSd * nextZ()) + monthly;
+    }
+    if (t % fanEvery === 0 || t === months - 1) {
+      const sorted = Float64Array.from(values).sort();
+      fan.push({ month: t + 1,
+        p10: percentileSorted(sorted, 0.10),
+        p50: percentileSorted(sorted, 0.50),
+        p90: percentileSorted(sorted, 0.90) });
+    }
+  }
+  const targetInfl = target * Math.pow(1 + inflation, years);
+  let hits = 0;
+  for (let s = 0; s < nSims; s++) if (values[s] >= targetInfl) hits++;
+  const sorted = Float64Array.from(values).sort();
+  return { prob: hits / nSims, targetInflated: targetInfl,
+    p10: percentileSorted(sorted, 0.10),
+    p50: percentileSorted(sorted, 0.50),
+    p90: percentileSorted(sorted, 0.90),
+    portfolioMu: pMu, portfolioVol: pVol, fan };
+}
+function resampleAllocations(lam, nDraws = 150, muUnc = 0.015, seed = 7) {
+  const rand = mulberry32(seed);
+  let spareZ = null;
+  const nextZ = () => {
+    if (spareZ !== null) { const z = spareZ; spareZ = null; return z; }
+    const [z1, z2] = gaussianPair(rand); spareZ = z2; return z1;
+  };
+  const all = [];
+  for (let d = 0; d < nDraws; d++) {
+    const muPert = MU.map(m => m + muUnc * nextZ());
+    all.push(longOnlyWeights(lam, muPert, COV, 4000));
+  }
+  const lo = [], hi = [];
+  for (let i = 0; i < MU.length; i++) {
+    const col = all.map(w => w[i]).sort((a, b) => a - b);
+    lo.push(percentileSorted(Float64Array.from(col), 0.10));
+    hi.push(percentileSorted(Float64Array.from(col), 0.90));
+  }
+  return { lo, hi };
+}
+
+// =================== Questionnaire ===================
+const QUESTIONS = [
+  { q: "What's your main aim for this money?", opts: [
+    "Protect it above all", "Grow it steadily with modest swings",
+    "Grow it long-term, accepting meaningful ups and downs",
+    "Maximize growth, accepting large swings"] },
+  { q: "Your portfolio drops 20% in a bad year. You would most likely:", opts: [
+    "Sell everything", "Sell some of it", "Hold and wait it out",
+    "Invest more while prices are down"] },
+  { q: "How stable is your income?", opts: [
+    "Unstable or none", "Somewhat variable", "Stable",
+    "Very stable, with an emergency fund covering 6+ months"] },
+  { q: "Your investing experience:", opts: [
+    "None", "A little", "Comfortable with market basics",
+    "Experienced — I understand volatility and drawdowns"] },
+  { q: "The largest one-year loss you could see without abandoning the plan:", opts: [
+    "Around 5%", "Around 10%", "Around 20%", "35% or more"] },
+  { q: "How likely are you to need this money before the goal date?", opts: [
+    "Very likely", "Possible", "Unlikely", "Almost no chance"] },
+];
+const answers = new Array(QUESTIONS.length).fill(null);
+
+function buildQuestionnaire() {
+  const box = document.getElementById('questions');
+  box.innerHTML = QUESTIONS.map((item, qi) => `
+    <div class="q-block">
+      <div class="q">${qi + 1}. ${item.q}</div>
+      ${item.opts.map((o, oi) => `
+        <label class="opt" id="opt-${qi}-${oi}">
+          <input type="radio" name="q${qi}" value="${oi}"
+                 onchange="setAnswer(${qi}, ${oi})">
+          <span>${o}</span>
+        </label>`).join('')}
+    </div>`).join('');
+}
+function setAnswer(qi, oi) {
+  answers[qi] = oi;
+  QUESTIONS[qi].opts.forEach((_, k) =>
+    document.getElementById(`opt-${qi}-${k}`).classList.toggle('selected', k === oi));
+  document.getElementById('qNext').disabled = answers.some(a => a === null);
+}
+function rawScore() {
+  return answers.reduce((s, a) => s + a, 0) / (3 * QUESTIONS.length) * 100;
+}
+
+// =================== Wizard navigation ===================
+function goStep(n) {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('step' + i).classList.toggle('hidden', i !== n);
+    const dot = document.getElementById('dot' + i);
+    dot.classList.toggle('active', i === n);
+    dot.classList.toggle('done', i < n);
+  }
+  window.scrollTo({ top: 0 });
+}
+
+// =================== Compute & render ===================
+let fanChart = null;
+let bands = null;
+
+function readInputs() {
+  return {
+    target: Math.max(1, parseFloat(document.getElementById('target').value) || 0),
+    years: Math.min(50, Math.max(1, parseInt(document.getElementById('years').value) || 1)),
+    current: Math.max(0, parseFloat(document.getElementById('current').value) || 0),
+    monthly: Math.max(0, parseFloat(document.getElementById('monthly').value) || 0),
+  };
+}
+const fmt$ = x => '$' + Math.round(x).toLocaleString('en-US');
+
+function computeAll(initial) {
+  const { target, current, monthly } = readInputs();
+  const years = initial ? readInputs().years
+    : parseInt(document.getElementById('wifYears').value);
+  const mth = initial ? monthly
+    : parseFloat(document.getElementById('wifMonthly').value);
+
+  document.getElementById('computing').classList.remove('hidden');
+  document.getElementById('results').classList.toggle('hidden', !!initial);
+
+  setTimeout(() => {
+    if (current === 0 && mth === 0) {
+      document.getElementById('computing').textContent =
+        'Enter a starting amount or a monthly contribution — with both at zero there is nothing to project.';
+      return;
+    }
+    const score = adjustedScore(rawScore(), years);
+    const lam = scoreToLambda(score);
+    const w = longOnlyWeights(lam, MU, COV);
+    const sim = goalSimulation(w, MU, COV, { target, current, monthly: mth, years });
+    if (initial || !bands) bands = resampleAllocations(lam);
+    render(sim, w, score, { target, current, monthly: mth, years });
+
+    if (initial) {
+      const wm = document.getElementById('wifMonthly');
+      wm.max = Math.max(100, Math.ceil(monthly * 3 / 25) * 25);
+      wm.value = monthly;
+      document.getElementById('wifYears').value = years;
+    }
+    document.getElementById('wifMonthlyVal').textContent = fmt$(mth) + '/mo';
+    document.getElementById('wifYearsVal').textContent = years + ' yrs';
+    document.getElementById('computing').classList.add('hidden');
+    document.getElementById('results').classList.remove('hidden');
+  }, 30);
+}
+
+function render(sim, w, score, inputs) {
+  document.getElementById('probBig').textContent = Math.round(sim.prob * 100) + '%';
+  document.getElementById('probCap').innerHTML =
+    `chance of reaching <strong>${fmt$(inputs.target)}</strong> (in today's dollars — ` +
+    `${fmt$(sim.targetInflated)} after ${inputs.years} years of 2.5% inflation). ` +
+    `That also means a ${Math.round((1 - sim.prob) * 100)}% chance of falling short.`;
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat"><div class="label">Median outcome</div>
+      <div class="value">${fmt$(sim.p50)}</div></div>
+    <div class="stat"><div class="label">Pessimistic (10th pct)</div>
+      <div class="value">${fmt$(sim.p10)}</div></div>
+    <div class="stat"><div class="label">Optimistic (90th pct)</div>
+      <div class="value">${fmt$(sim.p90)}</div></div>
+    <div class="stat"><div class="label">Risk score</div>
+      <div class="value">${Math.round(score)} / 100</div></div>
+    <div class="stat"><div class="label">Portfolio exp. return</div>
+      <div class="value">${(sim.portfolioMu * 100).toFixed(1)}%</div></div>
+    <div class="stat"><div class="label">Portfolio volatility</div>
+      <div class="value">${(sim.portfolioVol * 100).toFixed(1)}%</div></div>`;
+
+  const labels = sim.fan.map(f => (f.month / 12).toFixed(1));
+  const targetLine = sim.fan.map(f =>
+    inputs.target * Math.pow(1 + INFLATION, f.month / 12));
+  if (fanChart) fanChart.destroy();
+  fanChart = new Chart(document.getElementById('fanChart').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: '90th percentile', data: sim.fan.map(f => f.p90),
+        borderColor: 'rgba(79,209,197,0.35)', backgroundColor: 'rgba(79,209,197,0.12)',
+        fill: '+2', pointRadius: 0, borderWidth: 1, tension: 0.3 },
+      { label: 'Median', data: sim.fan.map(f => f.p50),
+        borderColor: '#4FD1C5', pointRadius: 0, borderWidth: 2.5, tension: 0.3 },
+      { label: '10th percentile', data: sim.fan.map(f => f.p10),
+        borderColor: 'rgba(79,209,197,0.35)', pointRadius: 0, borderWidth: 1, tension: 0.3 },
+      { label: 'Inflation-grown target', data: targetLine,
+        borderColor: '#F0B429', borderDash: [6, 4], pointRadius: 0,
+        borderWidth: 1.5, tension: 0 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: true,
+      scales: {
+        x: { title: { display: true, text: 'Years', color: '#8B96A8' },
+             ticks: { color: '#8B96A8', maxTicksLimit: 10 }, grid: { color: '#223047' } },
+        y: { ticks: { color: '#8B96A8', callback: v => '$' + (v >= 1e6
+              ? (v / 1e6).toFixed(1) + 'M' : (v / 1e3).toFixed(0) + 'k') },
+             grid: { color: '#223047' } },
+      },
+      plugins: { legend: { labels: { color: '#E5E9F0',
+        font: { family: 'Inter', size: 11 } } } },
+    },
+  });
+
+  const maxW = Math.max(...w, ...bands.hi, 0.01);
+  document.getElementById('weightsList').innerHTML = ASSETS.map((a, i) => {
+    const fillPct = (w[i] / maxW) * 100;
+    const loPct = (bands.lo[i] / maxW) * 100;
+    const hiPct = (bands.hi[i] / maxW) * 100;
+    return `<div class="weight-bar-row">
+      <span>${a}</span>
+      <div class="weight-track">
+        <div class="weight-fill" style="width:${fillPct}%"></div>
+        <div class="weight-range" style="left:${loPct}%; width:${Math.max(hiPct - loPct, 0.5)}%"></div>
+      </div>
+      <span class="weight-pct">${(w[i] * 100).toFixed(1)}% <span style="opacity:0.6">(${(bands.lo[i] * 100).toFixed(0)}–${(bands.hi[i] * 100).toFixed(0)})</span></span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('assumptions').innerHTML = `
+    <table class="assump">
+      <tr><th>Asset class</th><th>Exp. return</th><th>Volatility</th></tr>
+      ${ASSETS.map((a, i) =>
+        `<tr><td>${a}</td><td>${(MU[i] * 100).toFixed(1)}%</td>
+         <td>${(VOL[i] * 100).toFixed(1)}%</td></tr>`).join('')}
+      <tr><td>Inflation</td><td colspan="2">${(INFLATION * 100).toFixed(1)}% / yr</td></tr>
+    </table>`;
+}
+
+// What-if sliders: weights depend on horizon (via score), so horizon
+// changes recompute the allocation + uncertainty bands too.
+let debounceT = null;
+document.getElementById('wifMonthly').addEventListener('input', () => {
+  clearTimeout(debounceT);
+  debounceT = setTimeout(() => computeAll(false), 120);
+});
+document.getElementById('wifYears').addEventListener('input', () => {
+  clearTimeout(debounceT);
+  bands = null; // horizon shifts the risk score -> new allocation -> new bands
+  debounceT = setTimeout(() => computeAll(false), 200);
+});
+
+buildQuestionnaire();
+goStep(0);
+</script>
+</body>
+</html>
